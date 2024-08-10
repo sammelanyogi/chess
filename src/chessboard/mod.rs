@@ -1,6 +1,7 @@
 mod component;
 mod constants;
 mod system;
+mod utils;
 
 use bevy::input::common_conditions::*;
 use bevy::prelude::*;
@@ -13,13 +14,14 @@ pub struct ChessBoardPlugin;
 
 impl Plugin for ChessBoardPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Startup, ((spawn_board, spawn_pieces).after(spawn_engine),))
-            .add_event::<SelectSquareEvent>()
+        app.add_systems(PreStartup, spawn_engine)
+            .add_systems(Startup, (spawn_board, spawn_pieces))
+            .add_event::<BoardEvent>()
             .add_systems(
                 Update,
                 (
                     handle_input.run_if(input_just_pressed(MouseButton::Left)),
-                    handle_overlays,
+                    handle_board_event,
                 ),
             );
     }

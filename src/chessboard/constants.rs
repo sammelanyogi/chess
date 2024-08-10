@@ -1,4 +1,3 @@
-
 use bevy::prelude::*;
 
 pub const BLACK: Color = Color::rgb(0.7176470588235294, 0.7529411764705882, 0.8470588235294118);
@@ -9,3 +8,7 @@ pub const SQUARE_SIZE: f32 = 64.;
 
 pub const LEFT: f32 = -SQUARE_SIZE * 4. - SQUARE_SIZE / 2.;
 pub const BOTTOM: f32 = -SQUARE_SIZE * 4. - SQUARE_SIZE / 2.;
+
+pub const PIECES_CODE: [&str; 12] = [
+    "wp", "wr", "wn", "wb", "wq", "wk", "bp", "br", "bn", "bb", "bq", "bk",
+];

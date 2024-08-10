@@ -9,7 +9,7 @@ fn print_bits(x: u64) {
 }
 
 #[derive(Debug)]
-struct Position(u8, u8);
+pub struct Position(pub u8, pub u8);
 
 #[derive(Debug)]
 enum CastlingStatus {
@@ -20,10 +20,10 @@ enum CastlingStatus {
 
 #[derive(Component, Debug)]
 pub struct Chess {
-    pieces: [u64; 12],
-    white_turn: bool,
-    castling_status: [CastlingStatus; 2],
-    possible_enpassant: u8,
+    pub pieces: [u64; 12],
+    pub white_turn: bool,
+    pub castling_status: [CastlingStatus; 2],
+    pub possible_enpassant: u8,
 }
 
 impl Chess {
@@ -49,12 +49,12 @@ impl Chess {
         }
     }
 
-    fn position_to_index(position: &Position) -> u8 {
+    pub fn position_to_index(position: &Position) -> u8 {
         (position.1 - 1) * 8 + position.0 - 1
     }
 
-    fn index_to_position(index: u8) -> Position {
-        Position(index / 8 + 1, index % 8 + 1)
+    pub fn index_to_position(index: u8) -> Position {
+        Position(index % 8 + 1, index / 8 + 1)
     }
 
     fn possible_pawn_moves(&self, pawn_position: &Position) -> u64 {

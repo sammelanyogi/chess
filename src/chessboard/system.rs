@@ -3,17 +3,18 @@ use super::constants::*;
 use super::utils::*;
 use crate::engine::chess::*;
 use bevy::prelude::*;
+use bevy::sprite::*;
 use bevy::window::*;
 
 pub fn spawn_board(mut commands: Commands) {
     let black_square = Sprite {
-        color: BLACK,
+        color: BLACK.into(),
         custom_size: Some(Vec2::splat(SQUARE_SIZE)),
         ..Default::default()
     };
 
     let white_square = Sprite {
-        color: WHITE,
+        color: WHITE.into(),
         custom_size: Some(Vec2::splat(SQUARE_SIZE)),
         ..Default::default()
     };
@@ -47,10 +48,12 @@ pub fn spawn_board(mut commands: Commands) {
 pub fn handle_board_event(
     mut commands: Commands,
     mut ev_board: EventReader<BoardEvent>,
-    q_overlay: Query<Entity, With<Overlay>>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<ColorMaterial>>,
+    mut q_chess: Query<&mut Chess>,
     mut q_board: Query<&mut Board>,
     mut q_piece: Query<(&mut Piece, &mut Transform)>,
-    mut q_chess: Query<&mut Chess>,
+    q_overlay: Query<Entity, With<Overlay>>,
 ) {
     for ev in ev_board.read() {
         // Clear previous overlays before applying new one.
@@ -65,18 +68,17 @@ pub fn handle_board_event(
                     return;
                 }
                 let blue_square = Sprite {
-                    color: BLUE,
+                    color: BLUE.into(),
                     custom_size: Some(Vec2::splat(SQUARE_SIZE)),
                     ..Default::default()
                 };
-                let x_t = LEFT + position.0 as f32 * SQUARE_SIZE;
-                let y_t = BOTTOM + position.1 as f32 * SQUARE_SIZE;
+                let (x_t, y_t) = chess_position_to_world_position(position.clone());
 
                 // Spawn color for selected square
                 commands.spawn((
                     SpriteBundle {
                         sprite: blue_square,
-                        transform: Transform::from_xyz(x_t, y_t, 0.),
+                        transform: Transform::from_xyz(x_t, y_t, 5.),
                         ..Default::default()
                     },
                     Overlay,
@@ -85,25 +87,40 @@ pub fn handle_board_event(
                 let moves = chess.get_possible_moves(position);
                 let indices = get_indices_of_set_bits(moves);
 
+                // Spawn highlights for all possible moves
                 for pos_idx in indices.iter() {
                     let circle_pos = Chess::index_to_position(*pos_idx);
-                    let cx_t = LEFT + circle_pos.0 as f32 * SQUARE_SIZE;
-                    let cy_t = BOTTOM + circle_pos.1 as f32 * SQUARE_SIZE;
+                    let (cx_t, cy_t) = chess_position_to_world_position(circle_pos.clone());
 
-                    let blue_circle = Sprite {
-                        color: BLUE,
-                        custom_size: Some(Vec2::splat(SQUARE_SIZE / 2.5)),
-                        ..default()
-                    };
+                    println!("Valid Position : {:?}", circle_pos);
 
-                    commands.spawn((
-                        SpriteBundle {
-                            sprite: blue_circle,
-                            transform: Transform::from_xyz(cx_t, cy_t, 0.),
-                            ..default()
-                        },
-                        Overlay,
-                    ));
+                    if chess.contains_piece(&circle_pos) {
+                        let annulus_mesh = Mesh2dHandle(
+                            meshes.add(Annulus::new(SQUARE_SIZE / 2. - 12., SQUARE_SIZE / 2. - 4.)),
+                        );
+                        commands.spawn((
+                            MaterialMesh2dBundle {
+                                mesh: annulus_mesh,
+                                material: materials.add(ColorMaterial::from_color(BLUE)),
+                                transform: Transform::from_xyz(cx_t, cy_t, 5.0),
+                                ..default()
+                            },
+                            Overlay,
+                        ));
+                    } else {
+                        let circle_mesh = Mesh2dHandle(meshes.add(Circle {
+                            radius: SQUARE_SIZE / 6.0,
+                        }));
+                        commands.spawn((
+                            MaterialMesh2dBundle {
+                                mesh: circle_mesh,
+                                material: materials.add(ColorMaterial::from_color(BLUE)),
+                                transform: Transform::from_xyz(cx_t, cy_t, 5.0),
+                                ..default()
+                            },
+                            Overlay,
+                        ));
+                    }
                 }
 
                 for (piece, _) in q_piece.iter() {
@@ -210,8 +227,6 @@ pub fn spawn_pieces(
     let chess = q_chess.get_single().unwrap();
 
     for (idx, piece) in chess.pieces.iter().enumerate() {
-        println!("Piece Spawn: ({}, {:?})", idx, piece);
-
         let code = PIECES_CODE[idx];
         let texture = asset_server.load(format!("pieces/{code}.png"));
 

@@ -1,7 +1,5 @@
 use bevy::prelude::*;
-
-#[derive(Debug)]
-pub struct Position(pub u8, pub u8);
+use crate::engine::chess::*;
 
 #[derive(Event, Debug)]
 pub enum BoardEvent {

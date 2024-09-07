@@ -15,7 +15,7 @@ pub struct ChessBoardPlugin;
 impl Plugin for ChessBoardPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(PreStartup, spawn_engine)
-            .add_systems(Startup, (spawn_board, spawn_pieces))
+            .add_systems(Startup, (spawn_board, spawn_pieces, spawn_texts))
             .add_event::<BoardEvent>()
             .add_systems(
                 Update,

@@ -1,11 +1,11 @@
-use bevy::prelude::*;
 use crate::engine::chess::*;
+use bevy::prelude::*;
 
 #[derive(Event, Debug)]
 pub enum BoardEvent {
     SelectPiece(Position),
     DeselectAll,
-    MovePiece(Position, Position)
+    MovePiece(Position, Position),
 }
 
 #[derive(Component, Debug)]
@@ -16,13 +16,16 @@ pub struct Overlay;
 
 #[derive(Component, Debug)]
 pub struct Piece {
+    pub is_white: bool,
     pub position: Position,
     pub code: String,
 }
 
 #[derive(Component, Debug)]
 pub struct Board {
-    pub selected_piece: Option<Piece>
+    pub selected_piece: Option<Piece>,
+    pub white_out_count: u8,
+    pub black_out_count: u8
 }
 impl Board {
     pub fn update_piece(&mut self, piece: Piece) {
@@ -32,3 +35,14 @@ impl Board {
         self.selected_piece = None;
     }
 }
+
+#[derive(Component, Debug)]
+pub struct Player {
+    pub is_white: bool,
+}
+
+#[derive(Component, Debug)]
+pub struct TextInfo {
+    pub text_type: u8
+}
+

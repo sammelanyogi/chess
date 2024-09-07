@@ -21,7 +21,32 @@ pub fn spawn_board(mut commands: Commands) {
 
     commands.spawn(Board {
         selected_piece: None,
+        white_out_count: 0,
+        black_out_count: 0,
     });
+
+    for i in 0..2 {
+        let is_white = if i == 0 { true } else { false };
+        let color = if is_white { GREEN.into() } else { GRAY.into() };
+        let player_sprite = Sprite {
+            color,
+            custom_size: Some(Vec2::splat(SQUARE_SIZE / 2.)),
+            ..default()
+        };
+        let (x_t, y_t) = if is_white {
+            (3.5 * SQUARE_SIZE, -4.5 * SQUARE_SIZE)
+        } else {
+            (-3.5 * SQUARE_SIZE, 4.5 * SQUARE_SIZE)
+        };
+        commands.spawn((
+            SpriteBundle {
+                sprite: player_sprite,
+                transform: Transform::from_xyz(x_t, y_t, 0.),
+                ..default()
+            },
+            Player { is_white },
+        ));
+    }
 
     for i in 1..9 {
         for j in 1..9 {
@@ -45,6 +70,42 @@ pub fn spawn_board(mut commands: Commands) {
     }
 }
 
+pub fn spawn_texts(mut commands: Commands, asset_server: ResMut<AssetServer>) {
+    let font = asset_server.load("fonts/ProtestGuerrilla-Regular.ttf");
+    let d_font: Handle<Font> = asset_server.load("fonts/Gantari.ttf");
+    let text_style = TextStyle {
+        font: font.clone(),
+        color: DARK_BLACK.into(),
+        font_size: 90.0,
+        ..default()
+    };
+    let msg_style = TextStyle {
+        font: d_font.clone(),
+        color: DARK_BLACK.into(),
+        font_size: 40.,
+        ..default()
+    };
+    let text_justification = JustifyText::Center;
+
+    commands.spawn((
+        Text2dBundle {
+            text: Text::from_section("CHECKMATE", text_style.clone())
+                .with_justify(text_justification),
+            transform: Transform::from_xyz(0., 20., 30.).with_scale(Vec3::splat(0.)),
+            ..default()
+        },
+        TextInfo { text_type: 1 },
+    ));
+    commands.spawn((
+        Text2dBundle {
+            text: Text::from_section("", msg_style.clone()).with_justify(text_justification),
+            transform: Transform::from_xyz(0., -30., 30.).with_scale(Vec3::splat(0.)),
+            ..default()
+        },
+        TextInfo { text_type: 2 },
+    ));
+}
+
 pub fn handle_board_event(
     mut commands: Commands,
     mut ev_board: EventReader<BoardEvent>,
@@ -52,7 +113,9 @@ pub fn handle_board_event(
     mut materials: ResMut<Assets<ColorMaterial>>,
     mut q_chess: Query<&mut Chess>,
     mut q_board: Query<&mut Board>,
-    mut q_piece: Query<(&mut Piece, &mut Transform)>,
+    mut q_piece: Query<(&mut Piece, &mut Transform), Without<TextInfo>>,
+    mut q_player: Query<(&mut Player, &mut Sprite)>,
+    mut q_texts: Query<(&TextInfo, &mut Transform, &mut Text)>,
     q_overlay: Query<Entity, With<Overlay>>,
 ) {
     for ev in ev_board.read() {
@@ -92,8 +155,6 @@ pub fn handle_board_event(
                     let circle_pos = Chess::index_to_position(*pos_idx);
                     let (cx_t, cy_t) = chess_position_to_world_position(circle_pos.clone());
 
-                    println!("Valid Position : {:?}", circle_pos);
-
                     if chess.contains_piece(&circle_pos) {
                         let annulus_mesh = Mesh2dHandle(
                             meshes.add(Annulus::new(SQUARE_SIZE / 2. - 12., SQUARE_SIZE / 2. - 4.)),
@@ -126,6 +187,7 @@ pub fn handle_board_event(
                 for (piece, _) in q_piece.iter() {
                     if piece.position.0 == position.0 && piece.position.1 == position.1 {
                         board.update_piece(Piece {
+                            is_white: piece.is_white,
                             position: Position(piece.position.0, piece.position.1),
                             code: piece.code.clone(),
                         });
@@ -137,15 +199,24 @@ pub fn handle_board_event(
                 board.remove_selected();
             }
             BoardEvent::MovePiece(from, to) => {
-                println!("got Move piece event");
                 if chess.move_piece(from, to) {
-                    println!("Move Successful");
                     // Reflect the move in UI
                     if let Some((mut out_piece, mut out_transform)) = q_piece
                         .iter_mut()
                         .find(|(piece, _)| piece.position.0 == to.0 && piece.position.1 == to.1)
                     {
-                        out_transform.translation.y = BOTTOM;
+                        if out_piece.is_white {
+                            board.white_out_count = board.white_out_count + 1;
+                            out_transform.translation.y = 4.5 * SQUARE_SIZE;
+                            out_transform.translation.x = 4. * SQUARE_SIZE
+                                - (SQUARE_SIZE * board.white_out_count as f32 / 4.);
+                        } else {
+                            board.black_out_count = board.black_out_count + 1;
+                            out_transform.translation.y = -4.5 * SQUARE_SIZE;
+                            out_transform.translation.x = -4. * SQUARE_SIZE
+                                + (SQUARE_SIZE * board.black_out_count as f32 / 4.);
+                        }
+                        out_transform.scale = out_transform.scale * 0.5;
                         out_piece.position = Position(9, 9);
                     }
                     if let Some((mut piece, mut transform)) = q_piece
@@ -155,6 +226,33 @@ pub fn handle_board_event(
                         transform.translation.x = LEFT + to.0 as f32 * SQUARE_SIZE;
                         transform.translation.y = BOTTOM + to.1 as f32 * SQUARE_SIZE;
                         piece.position = Position(to.0, to.1);
+                    }
+                    for (player, mut sprite) in q_player.iter_mut() {
+                        if chess.white_turn == player.is_white {
+                            sprite.color = GREEN.into();
+                        } else {
+                            sprite.color = GRAY.into();
+                        }
+                    }
+                }
+                if chess.is_in_check() {
+                    if chess.is_checkmate() {
+                        let text_val = if chess.white_turn {
+                            "Black won"
+                        } else {
+                            "White Won"
+                        };
+                        for (text_info, mut transform, mut text) in q_texts.iter_mut() {
+                            if text_info.text_type == 1 {
+                                transform.scale = Vec3::splat(1.);
+                            } else {
+                                transform.scale = Vec3::splat(1.);
+                                text.sections[0].value = text_val.to_string();
+                            }
+                        }
+                        println!("CHECKMATE!! {} ", text_val)
+                    } else {
+                        println!("Check!!");
                     }
                 }
                 board.remove_selected();
@@ -247,6 +345,7 @@ pub fn spawn_pieces(
                     ..default()
                 },
                 Piece {
+                    is_white: code.chars().nth(0).unwrap() == 'w',
                     code: code.to_string(),
                     position: Position(position.0, position.1),
                 },

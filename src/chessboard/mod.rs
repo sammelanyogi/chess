@@ -1,6 +1,6 @@
-mod component;
+pub mod component;
 mod constants;
-mod system;
+pub mod system;
 mod utils;
 
 use bevy::input::common_conditions::*;

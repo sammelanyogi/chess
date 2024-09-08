@@ -20,6 +20,7 @@ pub fn spawn_board(mut commands: Commands) {
     };
 
     commands.spawn(Board {
+        white_turn: true,
         selected_piece: None,
         white_out_count: 0,
         black_out_count: 0,
@@ -85,6 +86,12 @@ pub fn spawn_texts(mut commands: Commands, asset_server: ResMut<AssetServer>) {
         font_size: 40.,
         ..default()
     };
+    let status_style = TextStyle {
+        font: d_font.clone(),
+        color: WHITE.into(),
+        font_size: 32.,
+        ..default()
+    };
     let text_justification = JustifyText::Center;
 
     commands.spawn((
@@ -104,6 +111,36 @@ pub fn spawn_texts(mut commands: Commands, asset_server: ResMut<AssetServer>) {
         },
         TextInfo { text_type: 2 },
     ));
+    // White's status
+    commands.spawn((
+        Text2dBundle {
+            text: Text::from_section("Your turn", status_style.clone())
+                .with_justify(text_justification),
+            transform: Transform::from_xyz(
+                3.5 * SQUARE_SIZE - SQUARE_SIZE * 1.5,
+                -4.5 * SQUARE_SIZE,
+                30.,
+            )
+            .with_scale(Vec3::splat(1.)),
+            ..default()
+        },
+        TextInfo { text_type: 3 },
+    ));
+    // Black's status
+    commands.spawn((
+        Text2dBundle {
+            text: Text::from_section("Thinking..", status_style.clone())
+                .with_justify(text_justification),
+            transform: Transform::from_xyz(
+                -3.5 * SQUARE_SIZE + SQUARE_SIZE * 1.5,
+                4.5 * SQUARE_SIZE,
+                30.,
+            )
+            .with_scale(Vec3::splat(0.)),
+            ..default()
+        },
+        TextInfo { text_type: 4 },
+    ));
 }
 
 pub fn handle_board_event(
@@ -117,6 +154,7 @@ pub fn handle_board_event(
     mut q_player: Query<(&mut Player, &mut Sprite)>,
     mut q_texts: Query<(&TextInfo, &mut Transform, &mut Text)>,
     q_overlay: Query<Entity, With<Overlay>>,
+    q_last_move_overlay: Query<Entity, With<LastMoveOverlay>>,
 ) {
     for ev in ev_board.read() {
         // Clear previous overlays before applying new one.
@@ -234,6 +272,17 @@ pub fn handle_board_event(
                             sprite.color = GRAY.into();
                         }
                     }
+                    board.update_turn(chess.white_turn);
+
+                    for (text_info, mut transform, _) in q_texts.iter_mut() {
+                        if text_info.text_type == 3 && chess.white_turn {
+                            transform.scale = Vec3::splat(1.);
+                        } else if text_info.text_type == 4 && !chess.white_turn {
+                            transform.scale = Vec3::splat(1.);
+                        } else {
+                            transform.scale = Vec3::splat(0.);
+                        }
+                    }
                 }
                 if chess.is_in_check() {
                     if chess.is_checkmate() {
@@ -245,7 +294,7 @@ pub fn handle_board_event(
                         for (text_info, mut transform, mut text) in q_texts.iter_mut() {
                             if text_info.text_type == 1 {
                                 transform.scale = Vec3::splat(1.);
-                            } else {
+                            } else if text_info.text_type == 2 {
                                 transform.scale = Vec3::splat(1.);
                                 text.sections[0].value = text_val.to_string();
                             }
@@ -256,6 +305,30 @@ pub fn handle_board_event(
                     }
                 }
                 board.remove_selected();
+                for lmo in q_last_move_overlay.iter() {
+                    commands.entity(lmo).despawn();
+                }
+                if let Some(last_move) = &chess.last_move {
+                    for pos_idx in [last_move.0, last_move.1].iter() {
+                        let position = Chess::index_to_position(*pos_idx);
+                        let blue_square = Sprite {
+                            color: TRANSPARENT_PURPLE.into(),
+                            custom_size: Some(Vec2::splat(SQUARE_SIZE)),
+                            ..Default::default()
+                        };
+                        let (x_t, y_t) = chess_position_to_world_position(position.clone());
+
+                        // Spawn color for selected square
+                        commands.spawn((
+                            SpriteBundle {
+                                sprite: blue_square,
+                                transform: Transform::from_xyz(x_t, y_t, 5.),
+                                ..Default::default()
+                            },
+                            LastMoveOverlay,
+                        ));
+                    }
+                }
             }
         }
     }

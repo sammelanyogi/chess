@@ -10,11 +10,16 @@ pub struct Position(pub u8, pub u8);
 //     QueenSide,
 //     KingSide,
 // }
+// Last move stores position in
+// idx format. idx for board in 64
+#[derive(Clone, Debug)]
+pub struct LastMove(pub u8, pub u8);
 
 #[derive(Component, Debug, Clone)]
 pub struct Chess {
     pub pieces: [u64; 12],
     pub white_turn: bool,
+    pub last_move: Option<LastMove>,
     // pub castling_status: [CastlingStatus; 2],
     // pub possible_enpassant: u8,
 }
@@ -37,7 +42,7 @@ impl Chess {
                 1152921504606846976,
             ],
             white_turn: true,
-            // possible_enpassant: 0,
+            last_move: None, // possible_enpassant: 0,
         }
     }
 
@@ -297,11 +302,7 @@ impl Chess {
             new_chess.dry_move(position, &new_position);
             if !new_chess.is_in_check() {
                 let idx = Chess::position_to_index(&new_position);
-                if piece_idx != self.get_king_position_idx() {
-                    return 1 << idx;
-                } else {
-                    saving_moves = saving_moves | (1 << idx);
-                }
+                saving_moves = saving_moves | (1 << idx);
             }
         }
         return saving_moves;
@@ -313,12 +314,12 @@ impl Chess {
             if self.is_in_check() {
                 return self.king_saving_move(piece_idx, position);
             }
-            let mut location =  self.get_possible_moves_by_piece_idx(piece_idx, position, self.white_turn);
+            let mut location =
+                self.get_possible_moves_by_piece_idx(piece_idx, position, self.white_turn);
             // prune all the move which causes check when applied
-                    // Check if the move is causing further check
+            // Check if the move is causing further check
             let new_positions = Chess::get_positions(location);
             for new_position in new_positions.iter() {
-
                 let mut new_chess = self.clone();
                 new_chess.dry_move(position, new_position);
                 if new_chess.is_in_check() {
@@ -367,11 +368,53 @@ impl Chess {
         ((1 << idx) & own_piece) == 0
     }
 
+    pub fn indices_of_set_bits(target: u64) -> Vec<u8> {
+        let mut indices = Vec::new();
+        let mut n = target;
+        let mut counter: u8 = 0;
+        while n > 0 {
+            if n & 1 > 0 {
+                indices.push(counter)
+            }
+            n = n >> 1;
+            counter = counter + 1;
+        }
+        return indices;
+    }
+
     pub fn contains_piece(&self, pos: &Position) -> bool {
         let all_pieces = self.get_all_pieces();
         let idx = Chess::position_to_index(pos);
 
         ((1 << idx) & all_pieces) > 0
+    }
+
+    pub fn possible_states(&self) -> Vec<Chess> {
+        let mut all_pos = Vec::<Chess>::new();
+        let my_pieces = self.get_color_pieces(self.white_turn);
+        let pieces = Chess::indices_of_set_bits(my_pieces);
+        let all_possible = pieces
+            .iter()
+            .map(|i| {
+                let from = Chess::index_to_position(*i);
+                let moves = Chess::indices_of_set_bits(self.get_possible_moves(&from.clone()))
+                    .iter()
+                    .map(|i| Chess::index_to_position(*i))
+                    .collect::<Vec<Position>>();
+
+                (from, moves)
+            })
+            .filter(|vm| vm.1.len() > 0)
+            .collect::<Vec<(Position, Vec<Position>)>>();
+        for vm in all_possible.iter() {
+            let from = vm.0.clone();
+            for to in vm.1.iter() {
+                let mut new_chess = self.clone();
+                new_chess.move_piece(&from, &to);
+                all_pos.push(new_chess);
+            }
+        }
+        return all_pos;
     }
 
     pub fn dry_move(&mut self, from: &Position, to: &Position) -> bool {
@@ -394,13 +437,13 @@ impl Chess {
             self.pieces[from_piece_idx as usize] =
                 self.pieces[from_piece_idx as usize] & !(1 << from_idx) | (1 << to_idx);
 
-            return true
+            return true;
         }
         false
     }
 
     pub fn move_piece(&mut self, from: &Position, to: &Position) -> bool {
-        println!("Moving {:?} -> {:?}", from, to);
+        // println!("Moving {:?} -> {:?}", from, to);
 
         if !self.is_move_valid(from, to) {
             return false;
@@ -409,13 +452,17 @@ impl Chess {
         let mut new_chess = self.clone();
         new_chess.dry_move(from, to);
         if new_chess.is_in_check() {
-            return false
+            return false;
         }
 
         let move_successful = self.dry_move(from, to);
         // Check if move created any check
         if move_successful {
             self.white_turn = !self.white_turn;
+            self.last_move = Some(LastMove(
+                Chess::position_to_index(from),
+                Chess::position_to_index(to),
+            ));
         }
         return move_successful;
     }
@@ -466,7 +513,7 @@ impl Chess {
         let indices = Chess::get_piece_indices(self.white_turn);
         // check if any of my piece can save king by moving
         for i in indices {
-            let positions  = Chess::get_positions(self.pieces[i as usize]);
+            let positions = Chess::get_positions(self.pieces[i as usize]);
             for position in positions.iter() {
                 let vm = self.king_saving_move(i, position);
                 if vm > 0 {
@@ -485,7 +532,7 @@ impl Chess {
     }
 
     // piece_color is true for white piece and false for black
-    fn get_color_pieces(&self, piece_color: bool) -> u64 {
+    pub fn get_color_pieces(&self, piece_color: bool) -> u64 {
         let desired_pieces = if piece_color {
             &self.pieces[0..6]
         } else {

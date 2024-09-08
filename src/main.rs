@@ -1,10 +1,13 @@
+mod bot;
 mod camera;
 mod chessboard;
 mod engine;
 
+use bevy::ecs::schedule::ExecutorKind;
 use bevy::prelude::*;
 use bevy::window::*;
 
+use bot::BotPlugin;
 use camera::CameraPlugin;
 use chessboard::ChessBoardPlugin;
 
@@ -20,6 +23,10 @@ fn main() {
             }),
             CameraPlugin,
             ChessBoardPlugin,
+            BotPlugin,
         ))
+        .edit_schedule(Update, |schedule| {
+            schedule.set_executor_kind(ExecutorKind::SingleThreaded);
+        })
         .run();
 }

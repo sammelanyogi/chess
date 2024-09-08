@@ -6,6 +6,7 @@ edition = "2021"
 [dependencies]
 async-std = "1.13.0"
 bevy = "0.14.1"
+bevy_async_task = "0.2.0"
 phf = { version = "0.11.2", features = ["macros"] }
 rand = "0.8.5"
 
